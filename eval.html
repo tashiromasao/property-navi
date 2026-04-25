@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>物件評価フォーム | 物件NAVI</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Hiragino Kaku Gothic ProN','ヒラギノ角ゴ ProN W3',Meiryo,sans-serif;font-size:14px;color:#1a1a1a;background:#f5f5f2;min-height:100vh;}
+.header{background:#fff;border-bottom:1px solid #e8e8e4;padding:0 20px;display:flex;align-items:center;height:52px;}
+.logo{font-size:17px;font-weight:600;color:#1a1a1a;}
+.logo span{color:#185FA5;}
+.badge-eval{margin-left:10px;padding:3px 10px;background:#E6F1FB;color:#0C447C;border-radius:99px;font-size:11px;font-weight:500;}
+.main{max-width:600px;margin:30px auto;padding:0 16px;}
+.card{background:#fff;border:1px solid #e8e8e4;border-radius:14px;padding:24px;}
+.card-title{font-size:16px;font-weight:700;margin-bottom:4px;}
+.card-sub{font-size:12px;color:#888;margin-bottom:20px;}
+.prop-info{background:#f8f8f5;border-radius:8px;padding:12px 14px;margin-bottom:20px;}
+.prop-name{font-size:15px;font-weight:700;margin-bottom:6px;}
+.prop-meta{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:#888;}
+.prop-meta strong{color:#1a1a1a;}
+.section-title{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;padding-bottom:5px;border-bottom:1px solid #f0f0ec;margin-bottom:10px;}
+.form-group{display:flex;flex-direction:column;gap:3px;margin-bottom:10px;}
+.form-label{font-size:11px;color:#888;}
+.form-input{padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:13px;color:#1a1a1a;width:100%;background:#fff;}
+.form-input:focus{outline:none;border-color:#378ADD;}
+textarea.form-input{resize:vertical;min-height:64px;}
+.star-rows{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
+.star-row{display:grid;grid-template-columns:90px 1fr auto;align-items:center;gap:8px;padding:8px 10px;background:#f8f8f5;border-radius:8px;}
+.star-label{font-size:12px;color:#555;}
+.star-inp{display:flex;gap:3px;}
+.star-inp span{font-size:22px;cursor:pointer;color:#ddd;transition:color .1s;}
+.star-inp span.on{color:#BA7517;}
+.star-comment-inp{padding:5px 8px;border:1px solid #ddd;border-radius:7px;font-size:12px;width:110px;background:#fff;}
+.photo-zone{border:2px dashed #ddd;border-radius:8px;padding:16px;text-align:center;cursor:pointer;color:#999;font-size:12px;transition:border-color .15s;}
+.photo-zone:hover{border-color:#378ADD;color:#185FA5;}
+.photo-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px;}
+.photo-thumb-wrap{position:relative;}
+.photo-thumb{width:74px;height:56px;border-radius:6px;object-fit:cover;border:1px solid #e8e8e4;}
+.photo-del{position:absolute;top:-5px;right:-5px;width:18px;height:18px;background:#A32D2D;color:#fff;border:none;border-radius:50%;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.btn-submit{width:100%;padding:13px;background:#185FA5;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-top:16px;}
+.btn-submit:hover{background:#0C447C;}
+.btn-submit:disabled{background:#aaa;cursor:not-allowed;}
+.slot-tabs{display:flex;gap:6px;margin-bottom:14px;}
+.slot-tab{padding:6px 14px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:13px;color:#555;}
+.slot-tab.active{background:#185FA5;color:#fff;border-color:#185FA5;}
+.done-state{text-align:center;padding:40px 20px;}
+.done-icon{font-size:48px;margin-bottom:12px;}
+.done-title{font-size:18px;font-weight:700;margin-bottom:6px;}
+.done-sub{font-size:13px;color:#888;}
+.error-state{text-align:center;padding:40px 20px;color:#A32D2D;}
+.loading-state{text-align:center;padding:40px 20px;color:#888;}
+
+@media(max-width:480px){
+  .star-row{grid-template-columns:80px 1fr;}
+  .star-comment-inp{display:none;}
+  .star-inp span{font-size:26px;}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">物件<span>NAVI</span></div>
+  <div class="badge-eval">評価フォーム</div>
+</div>
+
+<div class="main">
+  <div class="card" id="mainCard">
+    <div class="loading-state" id="loadingState">
+      <div style="font-size:28px;margin-bottom:8px">⏳</div>
+      <div>読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ========================================================
+// FIREBASE CONFIG — index.html と同じ値を設定
+// ========================================================
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDC4W02thDOGS-OD39ghRHRtFJv36GpbWc",
+  authDomain: "property-navi.firebaseapp.com",
+  databaseURL: "https://property-navi-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "property-navi",
+  storageBucket: "property-navi.firebasestorage.app",
+  messagingSenderId: "805974902202",
+  appId: "1:805974902202:web:67e4bc8f5f898c819b4983"
+};
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+
+const CATS = ['外観','内観','交通アクセス','周辺環境','空調','内装','管理状況'];
+
+const params       = new URLSearchParams(location.search);
+const propId       = params.get('propId');
+const memberName   = params.get('memberName') || '';
+const slotParam    = parseInt(params.get('slot') || '0', 10);
+
+let prop      = null;
+let evalData  = [null, null, null];
+let slot      = slotParam;
+let photos    = [];
+
+async function init() {
+  if (!propId) { showError('URLが正しくありません。メールのリンクを確認してください。'); return; }
+  try {
+    const [pSnap, eSnap] = await Promise.all([
+      db.ref(`props/${propId}`).once('value'),
+      db.ref(`evals/${propId}`).once('value')
+    ]);
+    prop     = pSnap.val();
+    evalData = eSnap.val() || [null, null, null];
+    if (!prop) { showError('物件が見つかりません。すでに削除されている可能性があります。'); return; }
+    renderForm();
+  } catch(e) {
+    showError('データの読み込みに失敗しました。ネットワーク接続を確認してください。');
+  }
+}
+
+function renderForm() {
+  const e   = evalData[slot];
+  const dt  = prop.datetime ? new Date(prop.datetime).toLocaleString('ja-JP',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+
+  document.getElementById('mainCard').innerHTML = `
+    <div class="card-title">内覧後の評価入力</div>
+    <div class="card-sub">内覧ありがとうございました。率直な感想をお聞かせください。</div>
+
+    <div class="prop-info">
+      <div class="prop-name">${esc(prop.name)}</div>
+      <div class="prop-meta">
+        <span>${esc(prop.station||prop.address||'—')}</span>
+        <span>内覧日: <strong>${dt}</strong></span>
+        ${prop.tsubo ? `<span><strong>${esc(prop.tsubo)}</strong></span>` : ''}
+      </div>
+    </div>
+
+    <div class="section-title">評価スロット（どなたの評価ですか？）</div>
+    <div class="slot-tabs" id="slotTabs">
+      ${['A','B','C'].map((l,i) => {
+        const filled = evalData[i] && evalData[i].name ? ' ✓' : '';
+        return `<button class="slot-tab${i===slot?' active':''}" onclick="switchSlot(${i})">評価者 ${l}${filled}</button>`;
+      }).join('')}
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">評価者名 *</label>
+      <input type="text" class="form-input" id="eName" placeholder="お名前" value="${esc(memberName || (e&&e.name?e.name:''))}">
+    </div>
+
+    <div class="section-title">各項目の評価（5段階）</div>
+    <div class="star-rows" id="starWrap">${buildStarRows(e)}</div>
+
+    <div class="form-group" style="margin-bottom:16px;">
+      <label class="form-label">総合コメント（50文字以内）</label>
+      <textarea class="form-input" id="eComment" maxlength="50" rows="3" placeholder="全体的な感想、気になった点など">${esc(e&&e.comment?e.comment:'')}</textarea>
+    </div>
+
+    <div class="section-title">内覧写真（最大10枚）</div>
+    <div class="photo-zone" onclick="document.getElementById('photoInp').click()">タップして写真を追加（各5MB以下）</div>
+    <input type="file" id="photoInp" accept="image/*" multiple style="display:none" onchange="handleUpload(this)">
+    <div id="photoRow" class="photo-row"></div>
+    ${e && e.photos && e.photos.length ? `<p style="font-size:11px;color:#aaa;margin-top:4px">保存済み: ${e.photos.length}枚（新しく追加すると上書きされます）</p>` : ''}
+
+    <button class="btn-submit" id="submitBtn" onclick="submit()">評価を送信する</button>
+  `;
+
+  photos = [];
+}
+
+function buildStarRows(e) {
+  return CATS.map(cat => {
+    const r   = e && e.ratings && e.ratings[cat] ? e.ratings[cat] : 0;
+    const cmt = e && e.comments && e.comments[cat] ? e.comments[cat] : '';
+    const cid = cat.replace(/\s/g,'_');
+    const stars = [1,2,3,4,5].map(v =>
+      `<span id="s_${cid}_${v}" class="${v<=r?'on':''}" onclick="setStar('${cid}',${v})">${v<=r?'★':'☆'}</span>`
+    ).join('');
+    return `<div class="star-row">
+      <div class="star-label">${cat}</div>
+      <div class="star-inp">${stars}</div>
+      <input type="text" class="star-comment-inp" id="sc_${cid}" maxlength="20" placeholder="ひとこと" value="${esc(cmt)}">
+    </div>`;
+  }).join('');
+}
+
+function switchSlot(i) {
+  slot   = i;
+  photos = [];
+  renderForm();
+}
+
+function setStar(cid, val) {
+  for (let v=1;v<=5;v++) {
+    const el = document.getElementById(`s_${cid}_${v}`);
+    if (el) { el.textContent = v<=val?'★':'☆'; el.className = v<=val?'on':''; }
+  }
+}
+
+function getStarVal(cat) {
+  const cid = cat.replace(/\s/g,'_');
+  let val = 0;
+  for (let v=1;v<=5;v++) {
+    const el = document.getElementById(`s_${cid}_${v}`);
+    if (el && el.textContent==='★') val = v;
+  }
+  return val;
+}
+
+function handleUpload(input) {
+  const files = Array.from(input.files);
+  files.slice(0, 10 - photos.length).forEach(file => {
+    if (file.size > 5*1024*1024) { alert('5MB以下の画像を選択してください'); return; }
+    const reader = new FileReader();
+    reader.onload = e => { photos.push(e.target.result); renderPhotoRow(); };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function renderPhotoRow() {
+  document.getElementById('photoRow').innerHTML = photos.map((src,i) =>
+    `<div class="photo-thumb-wrap">
+      <img class="photo-thumb" src="${src}" alt="">
+      <button class="photo-del" onclick="removePhoto(${i})">×</button>
+    </div>`).join('');
+}
+
+function removePhoto(i) { photos.splice(i,1); renderPhotoRow(); }
+
+async function submit() {
+  const name = document.getElementById('eName').value.trim();
+  if (!name) { alert('評価者名を入力してください'); return; }
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+
+  const ratings = {}, comments = {};
+  CATS.forEach(cat => {
+    ratings[cat]  = getStarVal(cat);
+    const el = document.getElementById('sc_'+cat.replace(/\s/g,'_'));
+    if (el) comments[cat] = el.value;
+  });
+
+  const entry = {
+    name,
+    ratings, comments,
+    photos: photos.length > 0 ? photos : (evalData[slot]?.photos || []),
+    comment:  document.getElementById('eComment').value,
+    savedAt:  new Date().toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
+  };
+
+  try {
+    const pe = [...(evalData || [null,null,null])];
+    pe[slot] = entry;
+    await db.ref(`evals/${propId}`).set(pe);
+
+    // 送信済みフラグを立てる（このメンバーが送信した通知キューを探して更新）
+    const qSnap = await db.ref('notifyQueue').orderByChild('propId').equalTo(propId).once('value');
+    const queues = qSnap.val() || {};
+    for (const [key, q] of Object.entries(queues)) {
+      if (q.memberName === name || q.memberEmail) {
+        await db.ref(`notifyQueue/${key}/sent`).set(true);
+      }
+    }
+
+    showDone(name);
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '評価を送信する';
+    alert('送信に失敗しました。再度お試しください。');
+  }
+}
+
+function showDone(name) {
+  document.getElementById('mainCard').innerHTML = `
+    <div class="done-state">
+      <div class="done-icon">✅</div>
+      <div class="done-title">${esc(name)} さん、ありがとうございました！</div>
+      <div class="done-sub" style="margin-top:8px">評価が保存されました。このページは閉じていただいて構いません。</div>
+    </div>`;
+}
+
+function showError(msg) {
+  document.getElementById('mainCard').innerHTML = `
+    <div class="error-state">
+      <div style="font-size:36px;margin-bottom:12px">⚠️</div>
+      <div style="font-weight:700;margin-bottom:6px">エラー</div>
+      <div style="font-size:13px;color:#666">${esc(msg)}</div>
+    </div>`;
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+init();
+</script>
+</body>
+</html>
