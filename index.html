@@ -101,6 +101,7 @@ textarea.form-input{resize:vertical;min-height:58px;}
 .photo-thumb-wrap{position:relative;}
 .photo-thumb{width:70px;height:52px;border-radius:6px;object-fit:cover;border:1px solid #e8e8e4;}
 .photo-del{position:absolute;top:-5px;right:-5px;width:18px;height:18px;background:#A32D2D;color:#fff;border:none;border-radius:50%;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.move-btn{background:rgba(255,255,255,.85);border:none;border-radius:3px;font-size:10px;cursor:pointer;padding:0 3px;color:#333;line-height:14px;}
 
 /* ===== MODAL ===== */
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;overflow-y:auto;padding:20px;}
@@ -1030,11 +1031,9 @@ function handleUpload(input, storeKey, rowId, maxCount) {
   input.value = '';
 }
 
-let dragSrcIdx = null;
-let dragStoreKey = null;
-
 function renderPhotoRow(rowId, store, storeKey) {
   const el = document.getElementById(rowId);
+  if (!el) return;
   if (!store.length) { el.innerHTML = ''; return; }
   el.innerHTML = store.map((item, i) => {
     const src  = typeof item === 'string' ? item : item.src;
@@ -1042,50 +1041,34 @@ function renderPhotoRow(rowId, store, storeKey) {
     const name = typeof item === 'string' ? '' : (item.name || '');
     const isPdf = type === 'application/pdf';
     const thumb = isPdf
-      ? `<div class="pdf-thumb"><span class="pdf-icon">📄</span><span>${esc(name.length > 8 ? name.slice(0,8)+'…' : name)}</span></div>`
+      ? `<div class="pdf-thumb"><span class="pdf-icon">📄</span><span style="font-size:10px;color:#888">${esc(name.length > 8 ? name.slice(0,8)+'…' : name)}</span></div>`
       : `<img class="photo-thumb" src="${src}" alt="">`;
-    const firstBadge = i === 0 ? `<div style="position:absolute;top:0;left:0;background:#185FA5;color:#fff;font-size:9px;padding:1px 5px;border-radius:6px 0 4px 0;pointer-events:none;">表紙</div>` : '';
-    return `<div class="photo-thumb-wrap" draggable="true"
-      data-idx="${i}" data-storekey="${storeKey}" data-rowid="${rowId}">
+    const firstBadge = i === 0 ? `<div style="position:absolute;top:0;left:0;background:#185FA5;color:#fff;font-size:9px;padding:1px 5px;border-radius:6px 0 4px 0;pointer-events:none;z-index:2;">表紙</div>` : '';
+    const moveLeft  = i > 0 ? `<button class="move-btn" onclick="movePhoto(${i},-1,'${rowId}','${storeKey}')">◀</button>` : '';
+    const moveRight = i < store.length-1 ? `<button class="move-btn" onclick="movePhoto(${i},1,'${rowId}','${storeKey}')">▶</button>` : '';
+    return `<div class="photo-thumb-wrap" style="position:relative;display:inline-block;">
       ${thumb}
       ${firstBadge}
-      <div class="drag-handle" style="pointer-events:none;">↔ 並替</div>
-      <button class="photo-del" data-idx="${i}" data-storekey="${storeKey}" data-rowid="${rowId}">×</button>
+      <button class="photo-del" onclick="removePhoto(${i},'${rowId}','${storeKey}')">×</button>
+      <div style="position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:2px;background:rgba(0,0,0,.4);border-radius:0 0 6px 6px;padding:1px;">
+        ${moveLeft}${moveRight}
+      </div>
     </div>`;
   }).join('');
+}
 
-  el.querySelectorAll('.photo-thumb-wrap').forEach(wrap => {
-    wrap.addEventListener('dragstart', e => {
-      dragSrcIdx   = parseInt(wrap.dataset.idx);
-      dragStoreKey = wrap.dataset.storekey;
-      wrap.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-    });
-    wrap.addEventListener('dragover',  e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
-    wrap.addEventListener('dragend',   () => wrap.classList.remove('dragging'));
-    wrap.addEventListener('drop', e => {
-      e.preventDefault();
-      const toIdx = parseInt(wrap.dataset.idx);
-      if (dragSrcIdx === null || dragSrcIdx === toIdx || dragStoreKey !== wrap.dataset.storekey) return;
-      const arr = dragStoreKey === 'propPhotos' ? propPhotos : evalPhotos;
-      const moved = arr.splice(dragSrcIdx, 1)[0];
-      arr.splice(toIdx, 0, moved);
-      dragSrcIdx = null;
-      renderPhotoRow(wrap.dataset.rowid, arr, dragStoreKey);
-    });
-  });
+function movePhoto(i, dir, rowId, storeKey) {
+  const store = storeKey === 'propPhotos' ? propPhotos : evalPhotos;
+  const to = i + dir;
+  if (to < 0 || to >= store.length) return;
+  const tmp = store[i]; store[i] = store[to]; store[to] = tmp;
+  renderPhotoRow(rowId, store, storeKey);
+}
 
-  el.querySelectorAll('.photo-del').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const idx      = parseInt(btn.dataset.idx);
-      const sk       = btn.dataset.storekey;
-      const rid      = btn.dataset.rowid;
-      const arr      = sk === 'propPhotos' ? propPhotos : evalPhotos;
-      arr.splice(idx, 1);
-      renderPhotoRow(rid, arr, sk);
-    });
-  });
+function removePhoto(i, rowId, storeKey) {
+  const store = storeKey === 'propPhotos' ? propPhotos : evalPhotos;
+  store.splice(i, 1);
+  renderPhotoRow(rowId, store, storeKey);
 }
 
 // ========================================================
