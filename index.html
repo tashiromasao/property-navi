@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -57,6 +58,16 @@ input,select,textarea,button{font-family:inherit;}
 .badge-pending{background:#FAEEDA;color:#633806;}
 .badge-abs{position:absolute;top:8px;right:8px;}
 .badge-date{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.52);color:#fff;padding:3px 8px;border-radius:99px;font-size:10px;}
+.badge-judgment{position:absolute;bottom:8px;left:8px;}
+.badge-rejected{background:#FCEBEB;color:#791F1F;}
+.badge-hold{background:#F1EFE8;color:#444441;}
+.badge-negotiate{background:#E1F5EE;color:#085041;}
+.photo-thumb-wrap{position:relative;cursor:grab;user-select:none;}
+.photo-thumb-wrap.dragging{opacity:0.4;}
+.drag-handle{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.45);color:#fff;font-size:9px;text-align:center;border-radius:0 0 6px 6px;padding:1px 0;cursor:grab;}
+.pdf-thumb{width:70px;height:52px;border-radius:6px;border:1px solid #e8e8e4;background:#f8f8f5;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;color:#888;gap:2px;}
+.pdf-icon{font-size:20px;}
+.card-datetime{font-size:11px;color:#666;margin-top:3px;}
 .card-body{padding:11px 13px;}
 .card-name{font-weight:600;font-size:14px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .card-addr-row{display:flex;align-items:center;gap:5px;margin-bottom:7px;}
@@ -195,9 +206,20 @@ textarea.form-input{resize:vertical;min-height:58px;}
         <option value="visited">内覧済み</option>
         <option value="pending">検討中</option>
       </select>
+      <select id="judgmentFilter" onchange="renderList()">
+        <option value="">すべての判断</option>
+        <option value="negotiate">交渉</option>
+        <option value="hold">保留</option>
+        <option value="rejected">却下</option>
+      </select>
+      <select id="sortOrder" onchange="renderList()">
+        <option value="date">内覧日順</option>
+        <option value="status">ステータス順</option>
+        <option value="judgment">判断順</option>
+      </select>
       <button class="btn btn-primary" onclick="openAddForm()">＋ 物件追加</button>
     </div>
-    <div class="sort-note">内覧日が近い未来の順 → 過去の順で表示</div>
+    <div class="sort-note" id="sortNote">内覧日が近い未来の順 → 過去の順で表示</div>
     <div id="propGrid" class="prop-grid"><div class="loading">読み込み中...</div></div>
   </div>
 
@@ -230,7 +252,7 @@ textarea.form-input{resize:vertical;min-height:58px;}
       </div>
 
       <div class="form-section">
-        <div class="section-title">賃料・費用</div>
+        <div class="section-title">賃料・費用（税抜）</div>
         <div class="form-grid-3">
           <div class="form-group"><label class="form-label">賃料（月額）</label><input type="text" class="form-input" id="fRent" placeholder="250,000円"></div>
           <div class="form-group"><label class="form-label">共益費</label><input type="text" class="form-input" id="fKyoeki" placeholder="20,000円"></div>
@@ -245,7 +267,10 @@ textarea.form-input{resize:vertical;min-height:58px;}
       <div class="form-section">
         <div class="section-title">不動産会社・担当</div>
         <div class="form-grid">
-          <div class="form-group"><label class="form-label">不動産会社名</label><input type="text" class="form-input" id="fAgency" placeholder="〇〇不動産"></div>
+          <div class="form-group"><label class="form-label">不動産会社名</label>
+            <input type="text" class="form-input" id="fAgency" placeholder="〇〇不動産" list="agencyList" autocomplete="off">
+            <datalist id="agencyList"></datalist>
+          </div>
           <div class="form-group"><label class="form-label">担当者名</label><input type="text" class="form-input" id="fAgent" placeholder="山田 太郎"></div>
           <div class="form-group"><label class="form-label">メールアドレス</label><input type="email" class="form-input" id="fEmail" placeholder="yamada@example.com"></div>
           <div class="form-group"><label class="form-label">電話番号</label><input type="text" class="form-input" id="fTel" placeholder="06-0000-0000"></div>
@@ -261,9 +286,9 @@ textarea.form-input{resize:vertical;min-height:58px;}
       </div>
 
       <div class="form-section">
-        <div class="section-title">物件写真（管理用・最大5枚）</div>
-        <div class="photo-zone" onclick="document.getElementById('fPhotosInput').click()">クリックして写真を追加（各5MB以下）</div>
-        <input type="file" id="fPhotosInput" accept="image/*" multiple style="display:none" onchange="handleUpload(this,'propPhotos','fPhotoRow',5)">
+        <div class="section-title">物件写真・資料（管理用・最大10件）</div>
+        <div class="photo-zone" onclick="document.getElementById('fPhotosInput').click()">クリックして写真・PDFを追加（各10MB以下）　※左端がサムネイルになります</div>
+        <input type="file" id="fPhotosInput" accept="image/*,application/pdf" multiple style="display:none" onchange="handleUpload(this,'propPhotos','fPhotoRow',10)">
         <div id="fPhotoRow" class="photo-row"></div>
       </div>
 
@@ -343,6 +368,23 @@ textarea.form-input{resize:vertical;min-height:58px;}
       <div class="form-group" style="margin-top:12px;">
         <label class="form-label">総合コメント（50文字以内）</label>
         <textarea class="form-input" id="eComment" maxlength="50" rows="2" placeholder="全体的な感想など"></textarea>
+      </div>
+      <div class="form-group" style="margin-top:12px;">
+        <label class="form-label">最終判断</label>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:7px 14px;border:1px solid #ddd;border-radius:8px;font-size:13px;flex:1;justify-content:center;" id="jLabel-negotiate">
+            <input type="radio" name="eJudgment" value="negotiate" style="display:none"> 交渉
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:7px 14px;border:1px solid #ddd;border-radius:8px;font-size:13px;flex:1;justify-content:center;" id="jLabel-hold">
+            <input type="radio" name="eJudgment" value="hold" style="display:none"> 保留
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:7px 14px;border:1px solid #ddd;border-radius:8px;font-size:13px;flex:1;justify-content:center;" id="jLabel-rejected">
+            <input type="radio" name="eJudgment" value="rejected" style="display:none"> 却下
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;padding:7px 14px;border:1px solid #ddd;border-radius:8px;font-size:13px;flex:1;justify-content:center;" id="jLabel-none">
+            <input type="radio" name="eJudgment" value="" checked style="display:none"> 未定
+          </label>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -494,9 +536,11 @@ function setSyncUI(state) {
   else                          { dot.style.background = '#E24B4A'; lbl.textContent = 'オフライン'; }
 }
 
-// ========================================================
-// SORT
-// ========================================================
+const JUDGMENT_LABEL = {negotiate:'交渉', hold:'保留', rejected:'却下'};
+const JUDGMENT_CLS   = {negotiate:'badge-negotiate', hold:'badge-hold', rejected:'badge-rejected'};
+const STATUS_ORDER   = {scheduled:0, visited:1, pending:2};
+const JUDGMENT_ORDER = {negotiate:0, hold:1, rejected:2, '':3};
+
 function sortedProps(filter) {
   const now = Date.now();
   let list = Object.values(props);
@@ -504,54 +548,88 @@ function sortedProps(filter) {
     const q = filter.q.toLowerCase();
     list = list.filter(p => [p.name,p.address,p.station].some(f => f && f.toLowerCase().includes(q)));
   }
-  if (filter.status) list = list.filter(p => p.status === filter.status);
+  if (filter.status)   list = list.filter(p => p.status === filter.status);
+  if (filter.judgment) list = list.filter(p => getTopJudgment(p.id) === filter.judgment);
 
-  const withDate  = list.filter(p => p.datetime);
-  const noDate    = list.filter(p => !p.datetime);
+  const sortMode = filter.sort || 'date';
+  const noteEl = document.getElementById('sortNote');
+
+  if (sortMode === 'status') {
+    if (noteEl) noteEl.textContent = 'ステータス順で表示';
+    return list.sort((a,b) => (STATUS_ORDER[a.status]||9) - (STATUS_ORDER[b.status]||9));
+  }
+  if (sortMode === 'judgment') {
+    if (noteEl) noteEl.textContent = '判断順（交渉→保留→却下→未定）で表示';
+    return list.sort((a,b) => (JUDGMENT_ORDER[getTopJudgment(a.id)]||9) - (JUDGMENT_ORDER[getTopJudgment(b.id)]||9));
+  }
+  if (noteEl) noteEl.textContent = '内覧日が近い未来の順 → 過去の順で表示';
+  const withDate = list.filter(p => p.datetime);
+  const noDate   = list.filter(p => !p.datetime);
   const future = withDate.filter(p => new Date(p.datetime) >= now).sort((a,b) => new Date(a.datetime)-new Date(b.datetime));
   const past   = withDate.filter(p => new Date(p.datetime) < now).sort((a,b)  => new Date(b.datetime)-new Date(a.datetime));
   return [...future, ...past, ...noDate];
+}
+
+function getTopJudgment(propId) {
+  const pe = evals[propId] || [];
+  const judgments = pe.filter(e => e && e.judgment).map(e => e.judgment);
+  if (!judgments.length) return '';
+  const cnt = {};
+  judgments.forEach(j => cnt[j] = (cnt[j]||0)+1);
+  return Object.entries(cnt).sort((a,b) => b[1]-a[1])[0][0];
 }
 
 // ========================================================
 // RENDER LIST
 // ========================================================
 function renderList() {
-  const q      = document.getElementById('searchQ').value;
-  const status = document.getElementById('statusFilter').value;
-  const list   = sortedProps({q, status});
-  const grid   = document.getElementById('propGrid');
+  const q        = document.getElementById('searchQ').value;
+  const status   = document.getElementById('statusFilter').value;
+  const judgment = document.getElementById('judgmentFilter').value;
+  const sort     = document.getElementById('sortOrder').value;
+  const list     = sortedProps({q, status, judgment, sort});
+  const grid     = document.getElementById('propGrid');
   if (!list.length) {
     grid.innerHTML = '<div class="empty"><div class="icon">🏢</div><p>物件がありません。「物件追加」から登録してください。</p></div>';
     return;
   }
   grid.innerHTML = list.map(p => cardHtml(p)).join('');
+  updateAgencyDatalist();
 }
 
 function cardHtml(p) {
-  const pe   = evals[p.id] || [];
-  const avg  = avgScore(pe);
-  const cnt  = pe.filter(e => e && e.name).length;
-  const dLbl = dateDiff(p.datetime);
-  const addr = p.address || p.station || '';
-  const imgH = p.photos && p.photos.length
-    ? `<img src="${p.photos[0]}" alt="" loading="lazy">`
+  const pe       = evals[p.id] || [];
+  const avg      = avgScore(pe);
+  const cnt      = pe.filter(e => e && e.name).length;
+  const dLbl     = dateDiff(p.datetime);
+  const addr     = p.address || p.station || '';
+  const judgment = getTopJudgment(p.id);
+  const firstPhoto = p.photoMeta && p.photoMeta.length ? p.photoMeta[0] : (p.photos && p.photos.length ? {src:p.photos[0],type:'image'} : null);
+  const isPdf = firstPhoto && (firstPhoto.type === 'application/pdf' || (firstPhoto.src||'').startsWith('data:application/pdf'));
+  const imgH = firstPhoto
+    ? (isPdf ? `<div class="card-img-icon" style="flex-direction:column;gap:4px"><span style="font-size:28px">📄</span><span style="font-size:10px;color:#888">PDF</span></div>`
+             : `<img src="${firstPhoto.src||firstPhoto}" alt="" loading="lazy">`)
     : `<div class="card-img-icon">🏢</div>`;
+  const dtStr = p.datetime
+    ? new Date(p.datetime).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})
+    : '';
   return `<div class="prop-card" onclick="openDetail('${p.id}')">
     <div class="card-img">${imgH}
       <span class="badge ${STATUS_CLS[p.status]||'badge-pending'} badge-abs">${STATUS_LABEL[p.status]||'検討中'}</span>
       ${dLbl ? `<span class="badge-date">${esc(dLbl)}</span>` : ''}
+      ${judgment ? `<span class="badge ${JUDGMENT_CLS[judgment]} badge-judgment">${JUDGMENT_LABEL[judgment]}</span>` : ''}
     </div>
     <div class="card-body">
       <div class="card-name">${esc(p.name)||'—'}</div>
       <div class="card-addr-row">
         <div class="card-addr">${esc(p.station||p.address||'—')}</div>
-        ${addr ? `<a class="btn-map" href="${mapUrl(addr)}" onclick="event.stopPropagation()" target="_blank" rel="noopener">📍 地図</a>` : ''}
+        ${addr ? `<a class="btn-map" href="${mapUrl(p.name, addr)}" onclick="event.stopPropagation()" target="_blank" rel="noopener">📍 地図</a>` : ''}
       </div>
       <div class="card-meta">
         <span><strong>${esc(p.tsubo)||'—'}</strong></span>
-        <span><strong>${esc(p.rent)||'—'}</strong></span>
+        <span><strong>${formatNum(p.rent)||'—'}</strong></span>
       </div>
+      ${dtStr ? `<div class="card-datetime">📅 ${dtStr}</div>` : ''}
       ${avg ? `<div class="card-stars"><span class="stars">${renderStars(avg)}</span><span class="star-count">${avg.toFixed(1)} / ${cnt}名評価</span></div>` : ''}
     </div>
   </div>`;
@@ -583,11 +661,11 @@ function renderDetailBody(p) {
     ['坪数',        p.tsubo],
     ['築年数',      p.nensu],
     ['現況',        p.current],
-    ['賃料',        p.rent],
-    ['共益費',      p.kyoeki],
-    ['敷金',        p.shikikin],
-    ['礼金',        p.reikin],
-    ['保証金',      p.hoshokin],
+    ['賃料',        p.rent,    false, false, true],
+    ['共益費',      p.kyoeki,  false, false, true],
+    ['敷金',        p.shikikin,false, false, true],
+    ['礼金',        p.reikin,  false, false, true],
+    ['保証金',      p.hoshokin,false, false, true],
     ['契約条件',    p.conditions],
     ['不動産会社',  p.agency],
     ['担当者',      p.agent],
@@ -597,13 +675,15 @@ function renderDetailBody(p) {
     ['内覧備考',    p.visitNote],
   ];
 
-  const fieldsHtml = fields.map(([label, val, isAddr, isUrl]) => {
+  const fieldsHtml = fields.map(([label, val, isAddr, isUrl, isNum]) => {
     if (!val) return '';
     let valHtml;
     if (isAddr) {
-      valHtml = `<div class="addr-row">${esc(val)} <a class="btn-map" href="${mapUrl(val)}" target="_blank" rel="noopener">📍 Google マップ</a></div>`;
+      valHtml = `<div class="addr-row">${esc(val)} <a class="btn-map" href="${mapUrl(p.name, val)}" target="_blank" rel="noopener">📍 Google マップ</a></div>`;
     } else if (isUrl) {
       valHtml = `<a href="${esc(val)}" target="_blank" rel="noopener" style="color:#185FA5;word-break:break-all;font-size:12px;">${esc(val)}</a>`;
+    } else if (isNum) {
+      valHtml = esc(formatNum(val));
     } else {
       valHtml = esc(val);
     }
@@ -614,8 +694,15 @@ function renderDetailBody(p) {
     ? `<div class="detail-field col-full" style="grid-column:1/-1"><div class="detail-label">備考</div><div class="detail-val" style="white-space:pre-wrap">${esc(p.notes)}</div></div>`
     : '';
 
-  const photosHtml = p.photos && p.photos.length
-    ? `<div class="photo-strip">${p.photos.map(ph => `<img src="${ph}" onclick="openImg('${ph}')" alt="" loading="lazy">`).join('')}</div>`
+  const photoList = p.photoMeta || (p.photos ? p.photos.map(s=>({src:s,name:'',type:'image'})) : []);
+  const photosHtml = photoList.length
+    ? `<div class="photo-strip">${photoList.map(item => {
+        const src  = item.src || item;
+        const isPdf = (item.type||'').includes('pdf') || src.startsWith('data:application/pdf');
+        return isPdf
+          ? `<div class="pdf-thumb" onclick="openFile('${src}')" style="cursor:pointer"><span class="pdf-icon">📄</span><span style="font-size:10px">${esc((item.name||'PDF').slice(0,8))}</span></div>`
+          : `<img src="${src}" onclick="openImg('${src}')" alt="" loading="lazy">`;
+      }).join('')}</div>`
     : '';
 
   const catAvgs = CATS.map(cat => {
@@ -637,10 +724,10 @@ function renderDetailBody(p) {
     </div>
     ${pe.filter(e=>e&&e.name).map((e,i) => `
       <div class="eval-card">
-        <div class="eval-card-top"><div class="eval-card-name">${esc(e.name)}</div><div class="eval-card-time">${esc(e.savedAt||'')}</div></div>
+        <div class="eval-card-top"><div class="eval-card-name">${esc(e.name)}${e.judgment ? ` <span class="badge ${JUDGMENT_CLS[e.judgment]}" style="font-size:10px;padding:2px 6px">${JUDGMENT_LABEL[e.judgment]}</span>` : ''}</div><div class="eval-card-time">${esc(e.savedAt||'')}</div></div>
         <div class="pill-row">${CATS.map(cat => e.ratings&&e.ratings[cat] ? `<span class="pill">${cat} ${'★'.repeat(e.ratings[cat])}${'☆'.repeat(5-e.ratings[cat])}${e.comments&&e.comments[cat]?' · '+esc(e.comments[cat]):''}</span>` : '').filter(Boolean).join('')}</div>
         ${e.comment ? `<div style="font-size:12px;color:#666">${esc(e.comment)}</div>` : ''}
-        ${e.photos&&e.photos.length ? `<div class="photo-strip" style="margin-top:6px">${e.photos.map(ph=>`<img src="${ph}" onclick="openImg('${ph}')" style="width:58px;height:43px" alt="" loading="lazy">`).join('')}</div>` : ''}
+        ${e.photos&&e.photos.length ? `<div class="photo-strip" style="margin-top:6px">${e.photos.map(ph=>{const s=typeof ph==='string'?ph:ph.src;const isPdf=s.startsWith('data:application/pdf');return isPdf?`<div class="pdf-thumb" onclick="openFile('${s}')" style="cursor:pointer;width:58px;height:43px"><span style="font-size:16px">📄</span></div>`:`<img src="${s}" onclick="openImg('${s}')" style="width:58px;height:43px" alt="" loading="lazy">`;}).join('')}</div>` : ''}
       </div>`).join('')}
   ` : '';
 
@@ -676,9 +763,27 @@ function renderEvalTabs() {
   const e = (evals[currentId]||[])[evalSlot];
   document.getElementById('eName').value    = e && e.name    ? e.name    : '';
   document.getElementById('eComment').value = e && e.comment ? e.comment : '';
-  evalPhotos = e && e.photos ? [...e.photos] : [];
+  evalPhotos = e && e.photos ? e.photos.map(p => typeof p === 'string' ? {src:p,name:'',type:'image'} : p) : [];
   renderPhotoRow('ePhotoRow', evalPhotos, 'eval');
+  const jVal = e && e.judgment ? e.judgment : '';
+  document.querySelectorAll('input[name="eJudgment"]').forEach(r => r.checked = r.value === jVal);
+  updateJudgmentUI();
 }
+
+function updateJudgmentUI() {
+  const colors = {negotiate:'#085041', hold:'#444441', rejected:'#791F1F', '':'#555'};
+  const bgs    = {negotiate:'#E1F5EE', hold:'#F1EFE8', rejected:'#FCEBEB', '':'#fff'};
+  document.querySelectorAll('input[name="eJudgment"]').forEach(r => {
+    const lbl = r.parentElement;
+    const sel = r.checked;
+    lbl.style.background   = sel ? bgs[r.value]    : '#fff';
+    lbl.style.color        = sel ? colors[r.value] : '#555';
+    lbl.style.borderColor  = sel ? colors[r.value] : '#ddd';
+    lbl.style.fontWeight   = sel ? '600' : '400';
+  });
+}
+
+document.addEventListener('change', e => { if (e.target.name === 'eJudgment') updateJudgmentUI(); });
 
 function setSlot(i) { evalSlot = i; renderEvalTabs(); renderStarInputs(); }
 
@@ -725,12 +830,14 @@ async function saveEval() {
     const el = document.getElementById('sc_'+cat.replace(/\s/g,'_'));
     if (el) comments[cat] = el.value;
   });
+  const judgmentEl = document.querySelector('input[name="eJudgment"]:checked');
   const entry = {
     name,
     ratings,
     comments,
-    photos:   [...evalPhotos],
+    photos:   evalPhotos.map(p => typeof p === 'string' ? p : p.src),
     comment:  document.getElementById('eComment').value,
+    judgment: judgmentEl ? judgmentEl.value : '',
     savedAt:  new Date().toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
   };
   const pe = [...(evals[currentId] || [null, null, null])];
@@ -755,7 +862,7 @@ function editProp() {
   const p = props[currentId];
   if (!p) return;
   editingId  = p.id;
-  propPhotos = p.photos ? [...p.photos] : [];
+  propPhotos = p.photoMeta ? [...p.photoMeta] : (p.photos ? p.photos.map(s=>({src:s,name:'',type:'image'})) : []);
   const map  = {name:'fName',refUrl:'fRefUrl',address:'fAddress',station:'fStation',tsubo:'fTsubo',nensu:'fNensu',status:'fStatus',current:'fCurrent',rent:'fRent',kyoeki:'fKyoeki',shikikin:'fShikikin',reikin:'fReikin',hoshokin:'fHoshokin',conditions:'fConditions',notes:'fNotes',agency:'fAgency',agent:'fAgent',email:'fEmail',tel:'fTel',datetime:'fDatetime',visitNote:'fVisitNote'};
   Object.entries(map).forEach(([k,id]) => { const el=document.getElementById(id); if(el) el.value=p[k]||''; });
   renderPhotoRow('fPhotoRow', propPhotos, 'prop');
@@ -782,7 +889,8 @@ async function saveProp() {
     notes: g('fNotes'), agency: g('fAgency'), agent: g('fAgent'),
     email: g('fEmail'), tel: g('fTel'),
     datetime: datetimeVal, visitNote: g('fVisitNote'),
-    photos: [...propPhotos],
+    photos: propPhotos.map(p => typeof p === 'string' ? p : p.src),
+    photoMeta: propPhotos.map(p => typeof p === 'string' ? {src:p,name:'',type:'image'} : p),
     createdAt: existing ? existing.createdAt : new Date().toISOString()
   };
 
@@ -881,25 +989,70 @@ function renderNotifyQueue() {
 }
 
 // ========================================================
-// PHOTO UPLOAD
+// PHOTO UPLOAD — drag sort, PDF support, individual delete
 // ========================================================
 function handleUpload(input, storeKey, rowId, maxCount) {
   const store = storeKey === 'propPhotos' ? propPhotos : evalPhotos;
-  Array.from(input.files).slice(0, maxCount - store.length).forEach(file => {
-    if (file.size > 5 * 1024 * 1024) { toast('5MB以下の画像を選択してください'); return; }
+  const files = Array.from(input.files).slice(0, maxCount - store.length);
+  let loaded = 0;
+  if (!files.length) { input.value = ''; return; }
+  files.forEach(file => {
+    if (file.size > 10 * 1024 * 1024) { toast('10MB以下のファイルを選択してください'); loaded++; return; }
     const reader = new FileReader();
-    reader.onload = e => { store.push(e.target.result); renderPhotoRow(rowId, store, storeKey); };
+    reader.onload = e => {
+      store.push({ src: e.target.result, name: file.name, type: file.type });
+      loaded++;
+      if (loaded === files.length) renderPhotoRow(rowId, store, storeKey);
+    };
     reader.readAsDataURL(file);
   });
   input.value = '';
 }
 
+let dragSrcIdx = null;
+let dragStoreKey = null;
+
 function renderPhotoRow(rowId, store, storeKey) {
-  document.getElementById(rowId).innerHTML = store.map((src, i) =>
-    `<div class="photo-thumb-wrap">
-      <img class="photo-thumb" src="${src}" alt="">
+  const el = document.getElementById(rowId);
+  if (!store.length) { el.innerHTML = ''; return; }
+  el.innerHTML = store.map((item, i) => {
+    const src  = typeof item === 'string' ? item : item.src;
+    const type = typeof item === 'string' ? (src.startsWith('data:application/pdf') ? 'application/pdf' : 'image') : (item.type || 'image');
+    const name = typeof item === 'string' ? '' : (item.name || '');
+    const isPdf = type === 'application/pdf' || src.startsWith('data:application/pdf');
+    const thumb = isPdf
+      ? `<div class="pdf-thumb"><span class="pdf-icon">📄</span><span>${esc(name.length > 8 ? name.slice(0,8)+'…' : name)}</span></div>`
+      : `<img class="photo-thumb" src="${src}" alt="" onclick="openImg('${src}')">`;
+    const firstBadge = i === 0 ? `<div style="position:absolute;top:0;left:0;background:#185FA5;color:#fff;font-size:9px;padding:1px 5px;border-radius:6px 0 4px 0;">表紙</div>` : '';
+    return `<div class="photo-thumb-wrap" draggable="true"
+      ondragstart="dragStart(event,${i},'${storeKey}','${rowId}')"
+      ondragover="dragOver(event)"
+      ondrop="dragDrop(event,${i},'${storeKey}','${rowId}')"
+      ondragend="dragEnd(event)">
+      ${thumb}
+      ${firstBadge}
+      <div class="drag-handle">↔ 並替</div>
       <button class="photo-del" onclick="removePhoto(${i},'${rowId}','${storeKey}')">×</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+function dragStart(e, idx, storeKey, rowId) {
+  dragSrcIdx   = idx;
+  dragStoreKey = storeKey;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function dragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function dragEnd(e)  { e.currentTarget.classList.remove('dragging'); }
+function dragDrop(e, toIdx, storeKey, rowId) {
+  e.preventDefault();
+  if (dragSrcIdx === null || dragSrcIdx === toIdx || dragStoreKey !== storeKey) return;
+  const store = storeKey === 'propPhotos' ? propPhotos : evalPhotos;
+  const item  = store.splice(dragSrcIdx, 1)[0];
+  store.splice(toIdx, 0, item);
+  dragSrcIdx = null;
+  renderPhotoRow(rowId, store, storeKey);
 }
 
 function removePhoto(i, rowId, storeKey) {
@@ -925,6 +1078,7 @@ function resetForm() {
   document.getElementById('fStatus').value = 'pending';
   propPhotos = [];
   document.getElementById('fPhotoRow').innerHTML = '';
+  updateAgencyDatalist();
 }
 
 function avgScore(pe) {
@@ -952,8 +1106,9 @@ function dateDiff(dt) {
   return null;
 }
 
-function mapUrl(addr) {
-  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr);
+function mapUrl(name, addr) {
+  const q = [name, addr].filter(Boolean).join(' ');
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
 }
 
 function esc(s) {
@@ -961,6 +1116,10 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function formatNum(s) {
+  if (!s) return s;
+  return String(s).replace(/(\d+)/g, m => Number(m).toLocaleString('ja-JP'));
+}
 function initials(name) {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);
@@ -969,10 +1128,24 @@ function initials(name) {
     : name.slice(0,2).toUpperCase();
 }
 
-function openImg(src) {
-  const w = window.open();
-  if (w) w.document.write(`<body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${src}" style="max-width:100%;max-height:100vh;object-fit:contain"></body>`);
+function updateAgencyDatalist() {
+  const agencies = [...new Set(Object.values(props).map(p => p.agency).filter(Boolean))];
+  const dl = document.getElementById('agencyList');
+  if (dl) dl.innerHTML = agencies.map(a => `<option value="${esc(a)}">`).join('');
 }
+
+function openFile(src) {
+  const w = window.open();
+  if (w) {
+    if (src.startsWith('data:application/pdf')) {
+      w.document.write(`<iframe src="${src}" style="width:100%;height:100vh;border:none"></iframe>`);
+    } else {
+      w.document.write(`<body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${src}" style="max-width:100%;max-height:100vh;object-fit:contain"></body>`);
+    }
+  }
+}
+
+function openImg(src) { openFile(src); }
 
 function toast(msg) {
   const el = document.getElementById('toast');
