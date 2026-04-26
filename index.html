@@ -1043,27 +1043,15 @@ function renderPhotoRow(rowId, store, storeKey) {
     const thumb = isPdf
       ? `<div class="pdf-thumb"><span class="pdf-icon">📄</span><span style="font-size:10px;color:#888">${esc(name.length > 8 ? name.slice(0,8)+'…' : name)}</span></div>`
       : `<img class="photo-thumb" src="${src}" alt="">`;
-    const firstBadge = i === 0 ? `<div style="position:absolute;top:0;left:0;background:#185FA5;color:#fff;font-size:9px;padding:1px 5px;border-radius:6px 0 4px 0;z-index:2;pointer-events:none;">表紙</div>` : '';
-    const canLeft  = i > 0;
-    const canRight = i < store.length - 1;
+    const firstBadge = i === 0
+      ? `<div style="position:absolute;top:0;left:0;background:#185FA5;color:#fff;font-size:9px;padding:1px 5px;border-radius:6px 0 4px 0;pointer-events:none;">表紙</div>`
+      : '';
     return `<div style="position:relative;display:inline-block;margin:0 7px 7px 0;vertical-align:top;">
       ${thumb}
       ${firstBadge}
-      <button type="button" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;background:#A32D2D;color:#fff;border:none;border-radius:50%;font-size:11px;cursor:pointer;z-index:3;line-height:1;padding:0;" onclick="photoDel('${rowId}','${storeKey}',${i})">×</button>
-      <div style="position:absolute;bottom:0;left:0;right:0;display:flex;background:rgba(0,0,0,.55);border-radius:0 0 6px 6px;">
-        <button type="button" style="flex:1;background:none;border:none;color:${canLeft?'#fff':'rgba(255,255,255,.2)'};font-size:14px;cursor:${canLeft?'pointer':'default'};padding:2px 0;" onclick="photoMove('${rowId}','${storeKey}',${i},-1)">◀</button>
-        <button type="button" style="flex:1;background:none;border:none;color:${canRight?'#fff':'rgba(255,255,255,.2)'};font-size:14px;cursor:${canRight?'pointer':'default'};padding:2px 0;" onclick="photoMove('${rowId}','${storeKey}',${i},1)">▶</button>
-      </div>
+      <button type="button" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;background:#A32D2D;color:#fff;border:none;border-radius:50%;font-size:12px;cursor:pointer;z-index:3;line-height:1;padding:0;" onclick="photoDel('${rowId}','${storeKey}',${i})">×</button>
     </div>`;
   }).join('');
-}
-
-function photoMove(rowId, storeKey, i, dir) {
-  const arr = storeKey === 'propPhotos' ? propPhotos : evalPhotos;
-  const to  = i + dir;
-  if (to < 0 || to >= arr.length) return;
-  const tmp = arr[i]; arr[i] = arr[to]; arr[to] = tmp;
-  renderPhotoRow(rowId, arr, storeKey);
 }
 
 function photoDel(rowId, storeKey, i) {
@@ -1073,7 +1061,6 @@ function photoDel(rowId, storeKey, i) {
 }
 
 function removePhoto(i, rowId, storeKey) { photoDel(rowId, storeKey, i); }
-function movePhoto(i, dir, rowId, storeKey) { photoMove(rowId, storeKey, i, dir); }
 
 // ========================================================
 // UTILS
