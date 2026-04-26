@@ -287,9 +287,14 @@ textarea.form-input{resize:vertical;min-height:58px;}
 
       <div class="form-section">
         <div class="section-title">物件写真・資料（管理用・最大10件）</div>
-        <div class="photo-zone" onclick="document.getElementById('fPhotosInput').click()">クリックして写真・PDFを追加（各10MB以下）　※左端がサムネイルになります</div>
-        <input type="file" id="fPhotosInput" accept="image/*,application/pdf" multiple style="display:none" onchange="handleUpload(this,'propPhotos','fPhotoRow',10)">
+        <div class="photo-zone" onclick="document.getElementById('fPhotosInput').click()">クリックして写真を追加（各10MB以下）　※左端がサムネイルになります</div>
+        <input type="file" id="fPhotosInput" accept="image/*" multiple style="display:none" onchange="handleUpload(this,'propPhotos','fPhotoRow',10)">
         <div id="fPhotoRow" class="photo-row"></div>
+        <div style="margin-top:12px;">
+          <div class="form-label" style="margin-bottom:6px;">PDF・資料のURL（Google DriveなどのURL）</div>
+          <div id="pdfUrlList"></div>
+          <button type="button" class="btn btn-sm" style="margin-top:6px;" onclick="addPdfUrlRow()">＋ URLを追加</button>
+        </div>
       </div>
 
       <div class="form-footer">
@@ -731,9 +736,23 @@ function renderDetailBody(p) {
       </div>`).join('')}
   ` : '';
 
+  const pdfUrlsHtml = p.pdfUrls && p.pdfUrls.length
+    ? `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:7px;">
+        ${p.pdfUrls.map(item => {
+          const url   = item.url || item;
+          const label = item.label || 'PDF資料';
+          const viewUrl = driveViewUrl(url);
+          return `<a href="${esc(viewUrl)}" target="_blank" rel="noopener"
+            style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#f8f8f5;border:1px solid #e8e8e4;border-radius:8px;font-size:12px;color:#185FA5;text-decoration:none;">
+            <span style="font-size:16px;">📄</span>${esc(label)}
+          </a>`;
+        }).join('')}
+      </div>`
+    : '';
+
   document.getElementById('detailBody').innerHTML = `
     <div class="detail-grid">${fieldsHtml}${notesHtml}</div>
-    ${photosHtml}${evalsHtml}`;
+    ${photosHtml}${pdfUrlsHtml}${evalsHtml}`;
 }
 
 function closeDetail() {
@@ -866,6 +885,7 @@ function editProp() {
   const map  = {name:'fName',refUrl:'fRefUrl',address:'fAddress',station:'fStation',tsubo:'fTsubo',nensu:'fNensu',status:'fStatus',current:'fCurrent',rent:'fRent',kyoeki:'fKyoeki',shikikin:'fShikikin',reikin:'fReikin',hoshokin:'fHoshokin',conditions:'fConditions',notes:'fNotes',agency:'fAgency',agent:'fAgent',email:'fEmail',tel:'fTel',datetime:'fDatetime',visitNote:'fVisitNote'};
   Object.entries(map).forEach(([k,id]) => { const el=document.getElementById(id); if(el) el.value=p[k]||''; });
   renderPhotoRow('fPhotoRow', propPhotos, 'prop');
+  renderPdfUrlList(p.pdfUrls || []);
   document.getElementById('formTitle').textContent = '物件を編集';
   closeDetail();
   showView('add');
@@ -891,6 +911,7 @@ async function saveProp() {
     datetime: datetimeVal, visitNote: g('fVisitNote'),
     photos: propPhotos.map(p => typeof p === 'string' ? p : p.src),
     photoMeta: propPhotos.map(p => typeof p === 'string' ? {src:p,name:'',type:'image'} : p),
+    pdfUrls: getPdfUrls(),
     createdAt: existing ? existing.createdAt : new Date().toISOString()
   };
 
@@ -1017,48 +1038,54 @@ function renderPhotoRow(rowId, store, storeKey) {
   if (!store.length) { el.innerHTML = ''; return; }
   el.innerHTML = store.map((item, i) => {
     const src  = typeof item === 'string' ? item : item.src;
-    const type = typeof item === 'string' ? (src.startsWith('data:application/pdf') ? 'application/pdf' : 'image') : (item.type || 'image');
+    const type = typeof item === 'string' ? 'image' : (item.type || 'image');
     const name = typeof item === 'string' ? '' : (item.name || '');
-    const isPdf = type === 'application/pdf' || src.startsWith('data:application/pdf');
+    const isPdf = type === 'application/pdf';
     const thumb = isPdf
       ? `<div class="pdf-thumb"><span class="pdf-icon">📄</span><span>${esc(name.length > 8 ? name.slice(0,8)+'…' : name)}</span></div>`
-      : `<img class="photo-thumb" src="${src}" alt="" onclick="openImg('${src}')">`;
-    const firstBadge = i === 0 ? `<div style="position:absolute;top:0;left:0;background:#185FA5;color:#fff;font-size:9px;padding:1px 5px;border-radius:6px 0 4px 0;">表紙</div>` : '';
+      : `<img class="photo-thumb" src="${src}" alt="">`;
+    const firstBadge = i === 0 ? `<div style="position:absolute;top:0;left:0;background:#185FA5;color:#fff;font-size:9px;padding:1px 5px;border-radius:6px 0 4px 0;pointer-events:none;">表紙</div>` : '';
     return `<div class="photo-thumb-wrap" draggable="true"
-      ondragstart="dragStart(event,${i},'${storeKey}','${rowId}')"
-      ondragover="dragOver(event)"
-      ondrop="dragDrop(event,${i},'${storeKey}','${rowId}')"
-      ondragend="dragEnd(event)">
+      data-idx="${i}" data-storekey="${storeKey}" data-rowid="${rowId}">
       ${thumb}
       ${firstBadge}
-      <div class="drag-handle">↔ 並替</div>
-      <button class="photo-del" onclick="removePhoto(${i},'${rowId}','${storeKey}')">×</button>
+      <div class="drag-handle" style="pointer-events:none;">↔ 並替</div>
+      <button class="photo-del" data-idx="${i}" data-storekey="${storeKey}" data-rowid="${rowId}">×</button>
     </div>`;
   }).join('');
-}
 
-function dragStart(e, idx, storeKey, rowId) {
-  dragSrcIdx   = idx;
-  dragStoreKey = storeKey;
-  e.currentTarget.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
-}
-function dragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
-function dragEnd(e)  { e.currentTarget.classList.remove('dragging'); }
-function dragDrop(e, toIdx, storeKey, rowId) {
-  e.preventDefault();
-  if (dragSrcIdx === null || dragSrcIdx === toIdx || dragStoreKey !== storeKey) return;
-  const store = storeKey === 'propPhotos' ? propPhotos : evalPhotos;
-  const item  = store.splice(dragSrcIdx, 1)[0];
-  store.splice(toIdx, 0, item);
-  dragSrcIdx = null;
-  renderPhotoRow(rowId, store, storeKey);
-}
+  el.querySelectorAll('.photo-thumb-wrap').forEach(wrap => {
+    wrap.addEventListener('dragstart', e => {
+      dragSrcIdx   = parseInt(wrap.dataset.idx);
+      dragStoreKey = wrap.dataset.storekey;
+      wrap.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    wrap.addEventListener('dragover',  e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+    wrap.addEventListener('dragend',   () => wrap.classList.remove('dragging'));
+    wrap.addEventListener('drop', e => {
+      e.preventDefault();
+      const toIdx = parseInt(wrap.dataset.idx);
+      if (dragSrcIdx === null || dragSrcIdx === toIdx || dragStoreKey !== wrap.dataset.storekey) return;
+      const arr = dragStoreKey === 'propPhotos' ? propPhotos : evalPhotos;
+      const moved = arr.splice(dragSrcIdx, 1)[0];
+      arr.splice(toIdx, 0, moved);
+      dragSrcIdx = null;
+      renderPhotoRow(wrap.dataset.rowid, arr, dragStoreKey);
+    });
+  });
 
-function removePhoto(i, rowId, storeKey) {
-  const store = storeKey === 'propPhotos' ? propPhotos : evalPhotos;
-  store.splice(i, 1);
-  renderPhotoRow(rowId, store, storeKey);
+  el.querySelectorAll('.photo-del').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const idx      = parseInt(btn.dataset.idx);
+      const sk       = btn.dataset.storekey;
+      const rid      = btn.dataset.rowid;
+      const arr      = sk === 'propPhotos' ? propPhotos : evalPhotos;
+      arr.splice(idx, 1);
+      renderPhotoRow(rid, arr, sk);
+    });
+  });
 }
 
 // ========================================================
@@ -1078,6 +1105,7 @@ function resetForm() {
   document.getElementById('fStatus').value = 'pending';
   propPhotos = [];
   document.getElementById('fPhotoRow').innerHTML = '';
+  renderPdfUrlList([]);
   updateAgencyDatalist();
 }
 
@@ -1126,6 +1154,46 @@ function initials(name) {
   return parts.length >= 2
     ? (parts[0][0] + parts[parts.length-1][0]).toUpperCase()
     : name.slice(0,2).toUpperCase();
+}
+
+// ========================================================
+// PDF URL MANAGEMENT
+// ========================================================
+function addPdfUrlRow(url='', label='') {
+  const list = document.getElementById('pdfUrlList');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px;';
+  row.innerHTML = `
+    <input type="url" class="form-input" placeholder="https://drive.google.com/..." value="${esc(url)}" style="flex:1;">
+    <input type="text" class="form-input" placeholder="資料名（任意）" value="${esc(label)}" style="width:130px;">
+    <button type="button" class="btn btn-sm" style="color:#A32D2D;border-color:#F09595;flex-shrink:0;" onclick="this.parentElement.remove()">×</button>
+  `;
+  list.appendChild(row);
+}
+
+function renderPdfUrlList(urls) {
+  const list = document.getElementById('pdfUrlList');
+  if (!list) return;
+  list.innerHTML = '';
+  (urls || []).forEach(item => {
+    addPdfUrlRow(item.url || item, item.label || '');
+  });
+}
+
+function getPdfUrls() {
+  const list = document.getElementById('pdfUrlList');
+  if (!list) return [];
+  return Array.from(list.querySelectorAll('div')).map(row => {
+    const inputs = row.querySelectorAll('input');
+    return { url: inputs[0]?.value.trim() || '', label: inputs[1]?.value.trim() || '' };
+  }).filter(item => item.url);
+}
+
+function driveViewUrl(url) {
+  // Google DriveのURLを閲覧用に変換
+  const m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  return url;
 }
 
 function updateAgencyDatalist() {
